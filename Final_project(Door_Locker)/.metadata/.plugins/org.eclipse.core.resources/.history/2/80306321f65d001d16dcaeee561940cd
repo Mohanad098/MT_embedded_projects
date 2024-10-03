@@ -1,0 +1,168 @@
+/******************************************************************************
+ *
+ * Module: HMI_ECU
+ *
+ * File Name: HMI.c
+ *
+ * Description: Main file for the HMI ECU of the Door Locker Security System
+ *
+ * Author: Mohanad Hany
+ *
+ *******************************************************************************/
+
+#include "lcd.h"
+#include "keypad.h"
+#include <util/delay.h> /* For the delay functions */
+#include "std_types.h"
+#include "uart.h"
+#include <avr/io.h>
+#include "timer1.h"
+
+#define HMI_READY 10
+#define CONTROL_READY 11
+#define OPEN_DOOR 20
+#define CHANGE_PASSWORD 21
+#define Array_size 5
+
+/*Global ptr of type UART_ConfigType to carry the configurations from the address of a structure to the UART*/
+UART_ConfigType *Ptr_UART_Config=0;
+Timer1_ConfigType *Ptr_Timer1_Config=0;
+uint8 tick=0;
+
+void DeInit_pass(uint8 *pass);
+void LCD_Timer(void);
+
+int main(void){
+	uint8 pass[Array_size],re_pass[Array_size],pass_check[Array_size];
+	uint8 step_1,count=0,equality=2,open,equality_open,change_pass,equality_change;
+	UART_ConfigType UART_Config ={Eight_bit,Disabled,One_bit,9600};
+	Ptr_UART_Config=&UART_Config;
+	/* Enable Global Interrupt I-Bit */
+	SREG |= (1<<7);
+	UART_init(Ptr_UART_Config);
+	Timer1_ConfigType Timer1_Config={0,1,Pre_1024,CTC_OCR1A,Normal};
+	Ptr_Timer1_Config=&Timer1_Config;
+	Timer1_setCallBack(LCD_Timer);
+
+	LCD_init();
+
+	while(1)
+	{
+		LCD_clearScreen();
+		LCD_displayStringRowColumn(0,0,"Plz enter pass:");
+		for (step_1=0;step_1<Array_size;step_1++){
+			/* Get the pressed key number, if any switch pressed for more than 500 ms it will considered more than one press */
+			pass[step_1] = KEYPAD_getPressedKey();
+			LCD_moveCursor(1, step_1);
+			LCD_displayString("*");
+			_delay_ms(500);
+			UART_sendByte(pass[step_1]);
+		}
+		if (step_1==5&&KEYPAD_getPressedKey()=='='){
+			LCD_displayStringRowColumn(0,0,"Plz re-enter the");
+			LCD_displayStringRowColumn(1,0,"same pass:");
+
+			for (uint8 y=10;y<(10+Array_size);y++){
+				/* Get the pressed key number, if any switch pressed for more than 500 ms it will considered more than one press */
+				re_pass[count] = KEYPAD_getPressedKey();
+				LCD_moveCursor(1, y);
+				LCD_displayString("*");
+				_delay_ms(500);
+				UART_sendByte(re_pass[count]);
+				count++;
+				step_1++;
+			}
+		}
+		while(KEYPAD_getPressedKey()!='='){};
+		if (step_1==10){
+			equality=UART_recieveByte();
+		}
+		if (equality==0){
+			step_1=0;
+			DeInit_pass(pass);
+			DeInit_pass(re_pass);
+		}
+		else{
+			while (step_1==10){
+				LCD_clearScreen();
+				LCD_displayStringRowColumn(0,0,"+: Open door");
+				LCD_displayStringRowColumn(1,0,"-: Change pass");
+				if (KEYPAD_getPressedKey()=='+'){
+					LCD_clearScreen();
+					LCD_displayStringRowColumn(0,0,"Plz enter pass:");
+					DeInit_pass(pass_check);
+					while(UART_recieveByte()!=CONTROL_READY);
+					UART_sendByte(OPEN_DOOR);
+					for (open=0;open<Array_size;open++){
+						pass_check[open] = KEYPAD_getPressedKey();
+						LCD_moveCursor(1, open);
+						LCD_displayString("*");
+						_delay_ms(500);
+						UART_sendByte(pass_check[open]);
+					}
+					while(KEYPAD_getPressedKey()!='=');
+					if (open==5){
+						while (UART_recieveByte()!=CONTROL_READY){};
+						equality_open=UART_recieveByte();
+					}
+					if (equality_open==1){
+						UART_sendByte(HMI_READY);
+						Timer1_init(Ptr_Timer1_Config);
+						tick=0;
+						LCD_clearScreen();
+						LCD_displayStringRowColumn(0,0,"Door is Unlocking");
+						while (tick<18){}
+						LCD_clearScreen();
+						LCD_displayStringRowColumn(0,0,"Door is Locking");
+						while(tick>=18&&tick<33){}
+						Timer1_deInit();
+					}
+					else{
+
+					}
+
+				}
+				else if (KEYPAD_getPressedKey()=='-'){
+					LCD_clearScreen();
+					LCD_displayStringRowColumn(0,0,"Plz enter pass:");
+					DeInit_pass(pass_check);
+					while (UART_recieveByte()!=CONTROL_READY){};
+					UART_sendByte(CHANGE_PASSWORD);
+					for (change_pass=0;change_pass<Array_size;change_pass++){
+						pass_check[change_pass] = KEYPAD_getPressedKey();
+						LCD_moveCursor(1, change_pass);
+						LCD_displayString("*");
+						_delay_ms(500);
+						UART_sendByte(pass_check[change_pass]);
+					}
+					while(KEYPAD_getPressedKey()!='=');
+					if (change_pass==5){
+						while (UART_recieveByte()!=CONTROL_READY){};
+						equality_change=UART_recieveByte();
+					}
+					if (equality_change==1){
+						step_1=0;
+					}
+				}
+
+
+
+
+
+
+
+			}
+		}
+	}
+
+}
+
+void DeInit_pass(uint8 *pass){
+	for (uint8 i=0;i<Array_size;i++){
+		pass[i]=0;
+	}
+}
+
+void LCD_Timer(void){
+	tick++;
+}

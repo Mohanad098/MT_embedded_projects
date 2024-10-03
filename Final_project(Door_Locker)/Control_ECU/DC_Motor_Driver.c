@@ -1,0 +1,74 @@
+/*
+ * Module: DC Motor
+ *
+ * File Name: DC_Motor_Driver.c
+ *
+ * Description: source file for DC Motor driver
+ *
+ * Author: Mohanad Hany
+ */
+
+#include "DC_Motor_Driver.h"
+#include "std_types.h"
+#include "PWM_Driver.h"
+
+/*
+ * The Function responsible for setup the direction for the two
+ * motor pins through the GPIO driver.
+ * Stop at the DC-Motor at the beginning through the GPIO driver
+ */
+
+void DcMotor_Init(void){
+
+	/* Setting IN1 and IN2 of the motor to portB pins 0 and 1, as output */
+
+	GPIO_setupPinDirection(IN1_PORT, IN1_PIN, PIN_OUTPUT);
+	GPIO_setupPinDirection(IN2_PORT, IN2_PIN, PIN_OUTPUT);
+
+	/* Setting both pins at 0 to stop the motor at the beginning */
+
+	GPIO_writePin(IN1_PORT, IN1_PIN, LOGIC_LOW);
+	GPIO_writePin(IN2_PORT, IN2_PIN, LOGIC_LOW);
+
+}
+
+/*
+ * The function responsible for rotate the DC Motor CW/ or A-CW or
+ * stop the motor based on the state input state value.
+ * Send the required duty cycle to the PWM driver based on the required speed value.
+ */
+
+void DcMotor_Rotate(DcMotor_State state,uint8 speed){
+
+	uint8 Duty_cycle;
+	/*
+	 * state would be either stop, anti clock wise or clock wise according to the user in the main function
+	 */
+
+	switch (state){
+
+	case Stop:
+		GPIO_writePin(PORTB_ID, PIN0_ID, 0);
+		GPIO_writePin(PORTB_ID, PIN1_ID, 0);
+		break;
+	case A_Cw:
+		GPIO_writePin(PORTB_ID, PIN0_ID, 1);
+		GPIO_writePin(PORTB_ID, PIN1_ID, 0);
+		break;
+	case Cw:
+		GPIO_writePin(PORTB_ID, PIN0_ID, 0);
+		GPIO_writePin(PORTB_ID, PIN1_ID, 1);
+		break;
+
+	}
+
+	/*
+	 * PWM modifications
+	 * 255 -> 100%
+	 * duty_cycle -> speed
+	 */
+	Duty_cycle=(speed*255)/100;
+	PWM_Timer0_Start(Duty_cycle);
+
+
+}

@@ -1,0 +1,31 @@
+02:40:37 **** Incremental Build of configuration Debug for project Fan_project ****
+make all 
+Building file: ../Main.c
+Invoking: AVR Compiler
+avr-gcc -Wall -g2 -gstabs -O0 -fpack-struct -fshort-enums -ffunction-sections -fdata-sections -std=gnu99 -funsigned-char -funsigned-bitfields -mmcu=atmega16 -DF_CPU=1000000UL -MMD -MP -MF"Main.d" -MT"Main.o" -c -o "Main.o" "../Main.c"
+Finished building: ../Main.c
+ 
+Building target: Fan_project.elf
+Invoking: AVR C Linker
+avr-gcc -Wl,-Map,Fan_project.map -mmcu=atmega16 -o "Fan_project.elf"  ./ADC.o ./DC_Motor_Driver.o ./Main.o ./PWM_Driver.o ./gpio.o ./lcd.o ./lm35_sensor.o   
+Finished building target: Fan_project.elf
+ 
+Invoking: AVR Create Extended Listing
+avr-objdump -h -S Fan_project.elf  >"Fan_project.lss"
+Finished building: Fan_project.lss
+ 
+Invoking: Print Size
+avr-size --format=avr --mcu=atmega16 Fan_project.elf
+AVR Memory Usage
+----------------
+Device: atmega16
+
+Program:    9522 bytes (58.1% Full)
+(.text + .data + .bootloader)
+
+Data:        298 bytes (29.1% Full)
+(.data + .bss + .noinit)
+
+
+Finished building: sizedummy
+ 

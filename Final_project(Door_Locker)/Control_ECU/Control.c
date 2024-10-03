@@ -1,0 +1,222 @@
+/******************************************************************************
+ *
+ * Module: Control_ECU
+ *
+ * File Name: Control.c
+ *
+ * Description: Main file for the Control ECU of the Door Locker Security System
+ *
+ * Author: Mohanad Hany
+ *
+ *******************************************************************************/
+
+#include "std_types.h"
+#include "uart.h"
+#include "twi.h"
+#include "external_eeprom.h"
+#include <avr/io.h>
+#include "DC_Motor_Driver.h"
+#include "timer1.h"
+#include <util/delay.h> /* For the delay functions */
+#include "buzzer.h"
+
+#define HMI_READY 10
+#define CONTROL_READY 11
+#define OPEN_DOOR 20
+#define CHANGE_PASSWORD 21
+#define TRY_PASS_AGAIN 30
+#define Array_size 5
+
+/*Global ptr of type UART_ConfigType to carry the configurations from the address of a structure to the UART*/
+UART_ConfigType *Ptr_UART_Config=0;
+TWI_ConfigType *Ptr_TWI_Config=0;
+Timer1_ConfigType *Ptr_Timer1_Config=0;
+uint8 tick=0;
+uint8 eeprom_pass[Array_size]={0};
+
+void EEPROM_write(uint16 address, uint8 numbers[]);
+void EEPROM_read(uint16 address, uint8 numbers[]);
+uint8 Equal_Arrays(uint8 *array1,uint8 *array2);
+void DC_Motor_timing(void);
+void DeInit_pass(uint8 *pass);
+uint8 Try_again(void);
+
+int main(void){
+	uint8 pass[Array_size],re_pass[Array_size],pass_open[Array_size],change_pass[Array_size];
+	uint8 i=0,y=0,check_open,check_change,step_1=1,step_3=0,step_4=0;
+	UART_ConfigType UART_Config ={Eight_bit,Disabled,One_bit,9600};
+	Ptr_UART_Config=&UART_Config;
+	/* Enable Global Interrupt I-Bit */
+	SREG |= (1<<7);
+	UART_init(Ptr_UART_Config);
+	TWI_ConfigType TWI_Config={0b00000010,Pre};
+	Ptr_TWI_Config=&TWI_Config;
+	TWI_init(Ptr_TWI_Config);
+	Timer1_ConfigType Timer1_Config={0,1,Pre_1024,CTC_OCR1A,Normal};
+	Ptr_Timer1_Config=&Timer1_Config;
+	Timer1_setCallBack(DC_Motor_timing);
+
+	DcMotor_Init();
+
+	while (1){
+		for (i=0;i<Array_size;i++){
+			pass[i]=UART_recieveByte();
+		}
+		for (i=5;i<(5+Array_size);i++){
+			re_pass[y]=UART_recieveByte();
+			y++;
+		}
+		if (Equal_Arrays(pass, re_pass)==1){
+			UART_sendByte(1);
+			EEPROM_write(0x0001,pass);
+			_delay_ms(10);
+			/**************************************STEP2 PHASE*************************************/
+			while(step_1==1){
+				if (step_3==0&&step_4==0){
+					UART_sendByte(CONTROL_READY);
+
+					if (UART_recieveByte()==OPEN_DOOR){/**************STEP3 PHASE*************/
+						for (uint8 m=0;m<Array_size;m++){
+							pass_open[m]=UART_recieveByte();
+						}
+						DeInit_pass(eeprom_pass);
+						EEPROM_read(0x0001,eeprom_pass);
+						UART_sendByte(CONTROL_READY);
+						check_open=Equal_Arrays(eeprom_pass,pass_open);
+						step_3=1;
+						while(step_3==1){
+							if (check_open==1){
+								UART_sendByte(1);
+
+								while (UART_recieveByte()!=HMI_READY){}
+								Timer1_init(Ptr_Timer1_Config);
+								tick=0;
+								DcMotor_Rotate(Cw,100);
+								while (tick<15){}
+								DcMotor_Rotate(Cw,0);
+								while (tick>=15&&tick<18){}
+								DcMotor_Rotate(A_Cw,100);
+								while (tick>=18&&tick<33){}
+								Timer1_deInit();
+								step_3=0;
+							}
+							else{
+								if(Try_again()==1){
+									check_open=1;
+								}
+								else{
+									Timer1_init(Ptr_Timer1_Config);
+									tick=0;
+									Buzzer_on();
+									while(tick<60){}
+									Timer1_deInit();
+									step_3=0;
+								}
+							}/********End of pass trial step_3*******/
+						}
+					}/***************End of step_3*****************/
+					else if (UART_recieveByte()==CHANGE_PASSWORD){/***********STEP4 PHASE*********/
+						DeInit_pass(eeprom_pass);
+						for (uint8 m=0;m<Array_size;m++){
+							change_pass[m]=UART_recieveByte();
+							EEPROM_read(0x0001,eeprom_pass);
+							UART_sendByte(CONTROL_READY);
+							check_change=Equal_Arrays(eeprom_pass,change_pass);
+							while(step_4==1){
+								if (check_change==1){
+									UART_sendByte(1);
+									step_4=0;
+								}
+								else{
+									if(Try_again()==1){
+										check_change=1;
+									}
+									else{
+										Timer1_init(Ptr_Timer1_Config);
+										tick=0;
+										Buzzer_on();
+										while(tick<60){}
+										Timer1_deInit();
+										step_4=0;
+									}
+								}/***end of pass trials step_4****/
+							}
+						}
+					}/****************end of step_4****************/
+				}
+			}
+		}
+/*****************If the 2 passwords written in the start are different**************/
+		else if (Equal_Arrays(pass, re_pass)==0){
+			UART_sendByte(0);
+			DeInit_pass(pass);
+			DeInit_pass(re_pass);
+		}
+
+	}/****End of while(1)*****/
+
+}
+
+void EEPROM_write(uint16 address, uint8 numbers[])
+{
+	uint16 addressIndex = address;
+	for (uint8 i = 0; i < Array_size; i++)
+	{
+		EEPROM_writeByte(addressIndex, numbers[i]);
+		addressIndex +=0x8;
+		_delay_ms(10);
+	}
+}
+
+void EEPROM_read(uint16 address, uint8 numbers[])
+{
+	uint16 addressIndex = address;
+	for (uint8 i = 0; i < Array_size; i++)
+	{
+		EEPROM_readByte(addressIndex, &numbers[i]);
+		addressIndex +=0x8;
+		_delay_ms(10);
+	}
+}
+
+uint8 Equal_Arrays(uint8 *array1,uint8 *array2){
+	uint8 i=0;
+	while(array1[i]==array2[i]){
+		i++;
+	}
+	if (i==5)
+		return 1;
+	else
+		return 0;
+}
+
+void DC_Motor_timing(void){
+	tick++;
+}
+void DeInit_pass(uint8 *pass){
+	for (uint8 i=0;i<Array_size;i++){
+		pass[i]=0;
+	}
+}
+
+uint8 Try_again(void){
+	uint8 pass_try[Array_size],trials=0,success=0;
+	while(UART_recieveByte()!=TRY_PASS_AGAIN){}
+	UART_sendByte(CONTROL_READY);
+	while(trials<3){
+		for (uint8 i=0;i<Array_size;i++){
+			pass_try[i]=UART_recieveByte();
+		}
+		UART_sendByte(CONTROL_READY);
+		if(Equal_Arrays(eeprom_pass, pass_try)==1){
+			UART_sendByte(1);
+			success=1;
+			return 1;
+		}
+		else{
+			UART_sendByte(0);
+			trials++;
+		}
+	}
+	return 0;
+}

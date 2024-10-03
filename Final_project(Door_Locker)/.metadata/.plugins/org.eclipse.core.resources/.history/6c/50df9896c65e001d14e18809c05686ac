@@ -1,0 +1,62 @@
+ /******************************************************************************
+ *
+ * Module: TIMER1
+ *
+ * File Name: timer1.h
+ *
+ * Description: header file for the Timer1 AVR driver
+ *
+ * Author: Mohanad Hany
+ *
+ *******************************************************************************/
+
+#ifndef TIMER1_H_
+#define TIMER1_H_
+
+#include "std_types.h"
+
+#define Compare_Mode
+//#define Normal_Mode
+
+/*
+ * Prescaler in TCCR1B register
+ */
+typedef enum{
+	No_clock,Pre_1,Pre_8,Pre_64,Pre_256,Pre_1024,Ext_clk_falling,Ext_clk_rising
+}Timer1_Prescaler;
+
+
+/*
+ * 2 registers are included here, TCCR1A and TCCR1B
+ * First 2 binary bits of the number goes to WGM10 and WGM11 of the register TCCR1A
+ * This is done by the equation: TCCR1A = ((Config_Ptr->mode)&0b0011)<<WGM10
+ * Last 2 binary bits of the number goes to WGM12 and WGM13 of the register TCCR1B
+ * This is done by the equation: TCCR1B = ((Config_Ptr->mode)&0b1100)<<WGM12
+ */
+typedef enum{
+	Normal_mode, PWM_PC_8_Bit, PWM_PC_9_Bit, PWM_PC_10_Bit, CTC_OCR1A,\
+	Fast_PWM_8_Bit, Fast_PWM_9_Bit, Fast_PWM_10_Bit, PWM_PF_ICR1, PWM_PF_OCR1A,\
+	PWM_P_ICR1, PWM_P_OCR1A, CTC_ICR1, Fast_PWM_ICR1=0b0111, Fast_PWM_OCR1A=0b1111
+}Timer1_Mode;
+
+/*
+ * Functionality of the mode of operation whether its normal, clear, toggle or set
+ * COM1A0 and COM1A1 at TCCR1A register
+ */
+typedef enum{
+	Normal,Toggle,Clear,Set
+}Timer1_Functionality;
+
+typedef struct {
+ uint16 initial_value;
+ uint16 compare_value; // it will be used in compare mode only.
+ Timer1_Prescaler prescaler;
+ Timer1_Mode mode;
+Timer1_Functionality mode_functionality;
+} Timer1_ConfigType;
+
+void Timer1_init(const Timer1_ConfigType * Config_Ptr);
+void Timer1_deInit(void);
+void Timer1_setCallBack(void(*a_ptr)(void));
+
+#endif /* TIMER1_H_ */

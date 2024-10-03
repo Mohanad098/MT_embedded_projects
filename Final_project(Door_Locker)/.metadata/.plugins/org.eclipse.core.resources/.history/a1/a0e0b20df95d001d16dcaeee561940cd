@@ -1,0 +1,157 @@
+/******************************************************************************
+ *
+ * Module: Control_ECU
+ *
+ * File Name: Control.c
+ *
+ * Description: Main file for the Control ECU of the Door Locker Security System
+ *
+ * Author: Mohanad Hany
+ *
+ *******************************************************************************/
+
+#include "std_types.h"
+#include "uart.h"
+#include "twi.h"
+#include "external_eeprom.h"
+#include <avr/io.h>
+#include "DC_Motor_Driver.h"
+#include "timer1.h"
+#include <util/delay.h> /* For the delay functions */
+
+#define HMI_READY 10
+#define CONTROL_READY 11
+#define OPEN_DOOR 20
+#define CHANGE_PASSWORD 21
+#define Array_size 5
+
+/*Global ptr of type UART_ConfigType to carry the configurations from the address of a structure to the UART*/
+UART_ConfigType *Ptr_UART_Config=0;
+TWI_ConfigType *Ptr_TWI_Config=0;
+Timer1_ConfigType *Ptr_Timer1_Config=0;
+uint8 tick=0;
+
+void EEPROM_write(uint16 address, uint8 numbers[]);
+void EEPROM_read(uint16 address, uint8 numbers[]);
+uint8 Equal_Arrays(uint8 *array1,uint8 *array2);
+void DC_Motor_timing(void);
+void DeInit_pass(uint8 *pass);
+
+int main(void){
+	uint8 pass[Array_size],re_pass[Array_size],pass_open[Array_size],eeprom_pass[Array_size],change_pass[Array_size];
+	uint8 i=0,y=0;
+	UART_ConfigType UART_Config ={Eight_bit,Disabled,One_bit,9600};
+	Ptr_UART_Config=&UART_Config;
+	/* Enable Global Interrupt I-Bit */
+	SREG |= (1<<7);
+	UART_init(Ptr_UART_Config);
+	TWI_ConfigType TWI_Config={0b00000010,Pre};
+	Ptr_TWI_Config=&TWI_Config;
+	TWI_init(Ptr_TWI_Config);
+	Timer1_ConfigType Timer1_Config={0,1,Pre_1024,CTC_OCR1A,Normal};
+	Ptr_Timer1_Config=&Timer1_Config;
+	Timer1_setCallBack(DC_Motor_timing);
+
+	DcMotor_Init();
+
+	while (1){
+		for (i=0;i<Array_size;i++){
+			pass[i]=UART_recieveByte();
+		}
+		for (i=5;i<(5+Array_size);i++){
+			re_pass[y]=UART_recieveByte();
+			y++;
+		}
+		if (Equal_Arrays(pass, re_pass)==1){
+			UART_sendByte(1);
+			EEPROM_write(0x0001,pass);
+			_delay_ms(10);
+			UART_sendByte(CONTROL_READY);
+			_delay_ms(10);
+			if (UART_recieveByte()==OPEN_DOOR){
+				for (uint8 m=0;m<Array_size;m++){
+					pass_open[m]=UART_recieveByte();
+				}
+				DeInit_pass(eeprom_pass);
+				EEPROM_read(0x0001,eeprom_pass);
+				UART_sendByte(CONTROL_READY);
+				if (Equal_Arrays(eeprom_pass,pass_open)==1){
+					UART_sendByte(1);
+					while (UART_recieveByte()!=HMI_READY){}
+					Timer1_init(Ptr_Timer1_Config);
+					tick=0;
+					DcMotor_Rotate(Cw,100);
+					while (tick<15){}
+					DcMotor_Rotate(Cw,0);
+					while (tick>=15&&tick<18){}
+					DcMotor_Rotate(A_Cw,100);
+					while (tick>=18&&tick<33){}
+					Timer1_deInit();
+				}
+				else{
+
+				}
+			}
+			else if (UART_recieveByte()==CHANGE_PASSWORD){
+				DeInit_pass(eeprom_pass);
+				for (uint8 m=0;m<Array_size;m++){
+					change_pass[m]=UART_recieveByte();
+					EEPROM_read(0x0001,eeprom_pass);
+					UART_sendByte(CONTROL_READY);
+					if (Equal_Arrays(eeprom_pass,change_pass)==1){
+						UART_sendByte(1);
+					}
+				}
+			}
+		}
+			else if (Equal_Arrays(pass, re_pass)==0){
+				UART_sendByte(0);
+				DeInit_pass(pass);
+				DeInit_pass(re_pass);
+			}
+
+		}
+
+	}
+
+	void EEPROM_write(uint16 address, uint8 numbers[])
+	{
+		uint16 addressIndex = address;
+		for (uint8 i = 0; i < Array_size; i++)
+		{
+			EEPROM_writeByte(addressIndex, numbers[i]);
+			addressIndex +=0x8;
+			_delay_ms(10);
+		}
+	}
+
+	void EEPROM_read(uint16 address, uint8 numbers[])
+	{
+		uint16 addressIndex = address;
+		for (uint8 i = 0; i < Array_size; i++)
+		{
+			EEPROM_readByte(addressIndex, &numbers[i]);
+			addressIndex +=0x8;
+			_delay_ms(10);
+		}
+	}
+
+	uint8 Equal_Arrays(uint8 *array1,uint8 *array2){
+		uint8 i=0;
+		while(array1[i]==array2[i]){
+			i++;
+		}
+		if (i==5)
+			return 1;
+		else
+			return 0;
+	}
+
+	void DC_Motor_timing(void){
+		tick++;
+	}
+	void DeInit_pass(uint8 *pass){
+		for (uint8 i=0;i<Array_size;i++){
+			pass[i]=0;
+		}
+	}

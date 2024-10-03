@@ -1,0 +1,22 @@
+ /******************************************************************************
+ *
+ * Module: TIMER1
+ *
+ * File Name: timer1.c
+ *
+ * Description: Source file for the Timer1 AVR driver
+ *
+ * Author: Mohanad Hany
+ *
+ *******************************************************************************/
+#include "timer1.h"
+
+void Timer1_init(const Timer1_ConfigType * Config_Ptr){
+
+}
+void Timer1_deInit(void){
+
+}
+void Timer1_setCallBack(void(*a_ptr)(void)){
+
+}
